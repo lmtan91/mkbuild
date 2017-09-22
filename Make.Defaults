@@ -1,0 +1,428 @@
+# -*-makefile-*-
+#
+
+# TOPDIR/TOPSRCDIR is declared by the Makefile including this file.
+ifndef TOPSRCDIR
+	ifdef TOPDIR
+		TOPSRCDIR := $(TOPDIR)
+	else
+		TOPSRCDIR := .
+	endif
+endif
+
+ifndef TOPDIR
+	TOPDIR := $(TOPSRCDIR)
+endif
+
+ifndef ABS_TOPDIR
+	ABS_TOPDIR := $(shell cd $(TOPDIR) && pwd)
+endif
+
+# Support out of src tree builds
+TOPOBJDIR ?= $(TOPSRCDIR)
+
+ifeq ($(MK_QUIET),no)
+QUIET = 
+else
+QUIET = @
+endif
+
+PROJECT_BUILD ?= $(TOPDIR)/mkbuild
+
+# set EXTRA_CFLAGS to add compiler flags via the make cmdline
+PLATFORM_CFLAGS += $(EXTRA_CFLAGS)
+
+ifndef PLATFORM
+	_UNAME := $(shell uname)
+	ifneq (,$(filter CYGWIN%,$(_UNAME)))
+		PLATFORM = Cygwin
+	else
+		PLATFORM = LinuxPC
+	endif
+endif
+export PLATFORM
+
+DEFAULT_PLATFORMS = LinuxPC Broadcom BroadcomBE Broadcom26 Broadcom_C Broadcom_D Broadcom_E Broadcom_F Broadcom_G ST Conexant Horizon Horizon_A IntelC NXP225 NXP_B
+
+MAKEFILE_DEPS += Makefile \
+	$(PROJECT_BUILD)/Make.Defaults \
+	$(PROJECT_BUILD)/Make.Rules \
+	$(PROJECT_BUILD)/Make.$(PLATFORM) \
+	$(NULL)
+
+ifdef EXTRA_MAKE_INC
+	include $(TOPDIR)/$(EXTRA_MAKE_INC)
+	MAKEFILE_DEPS += $(TOPDIR)/$(EXTRA_MAKE_INC)
+endif
+
+# The platform-specific Makefiles include portability nightmares.
+# Some platforms, though, don't have one, so check for existence first
+PLATFORM_MAKEFILE = $(PROJECT_BUILD)/Make.$(PLATFORM)
+ifeq ($(PLATFORM_MAKEFILE),$(wildcard $(PLATFORM_MAKEFILE)))
+	include $(PLATFORM_MAKEFILE)
+	MAKEFILE_DEPS += $(PLATFORM_MAKEFILE)
+endif
+
+INCDIRS += $(PLATFORM_INCDIRS)
+
+# Allow developers to change default toolchain by setting 
+# TOOLCHAIN_BASE & CROSS_COMPILE
+ifdef TOOLCHAIN_BASE
+DEFAULT_TOOLCHAIN_PREFIX = $(TOOLCHAIN_BASE)/bin/$(CROSS_COMPILE)
+endif
+
+DEFAULT_AS      ?=$(DEFAULT_TOOLCHAIN_PREFIX)as
+DEFAULT_LD      ?=$(DEFAULT_TOOLCHAIN_PREFIX)ld
+DEFAULT_CC      ?=$(DEFAULT_TOOLCHAIN_PREFIX)gcc
+DEFAULT_CPP     ?=$(CC) -E
+DEFAULT_CXX     ?=$(DEFAULT_TOOLCHAIN_PREFIX)g++
+DEFAULT_AR      ?=$(DEFAULT_TOOLCHAIN_PREFIX)ar
+DEFAULT_RANLIB  ?=$(DEFAULT_TOOLCHAIN_PREFIX)ranlib
+DEFAULT_NM      ?=$(DEFAULT_TOOLCHAIN_PREFIX)nm
+DEFAULT_STRIP   ?=$(DEFAULT_TOOLCHAIN_PREFIX)strip --strip-debug --remove-section=.comment --remove-section=.note --preserve-dates
+DEFAULT_OBJCOPY ?=$(DEFAULT_TOOLCHAIN_PREFIX)objcopy
+DEFAULT_OBJDUMP ?=$(DEFAULT_TOOLCHAIN_PREFIX)objdump
+PERL            ?= perl
+
+AS      =$(DEFAULT_AS)
+LD      =$(DEFAULT_LD)
+CC      =$(DISTCC) $(DEFAULT_CC)
+CPP     =$(DEFAULT_CPP)
+CXX     =$(DISTCC) $(DEFAULT_CXX)
+AR      =$(DEFAULT_AR)
+RANLIB  =$(DEFAULT_RANLIB)
+NM      =$(DEFAULT_NM)
+STRIP   =$(DEFAULT_STRIP)
+OBJCOPY =$(DEFAULT_OBJCOPY)
+OBJDUMP =$(DEFAULT_OBJDUMP)
+MKINSTALL=$(PROJECT_BUILD)/install.sh
+CP      = cp
+
+JAVA_HOME ?= /usr/java/j2sdk1.4.2_11
+JAVAC = $(JAVA_HOME)/bin/javac
+JAVAH = $(JAVA_HOME)/bin/javah
+JAR = $(JAVA_HOME)/bin/jar
+
+# ARCH can be speficed on the comdline or env. too, and defaults to this arch
+# Unfortunately, we can't easily extract it from kernel configuration
+# (well, we could look athe asm- symlink... don't know if worth the effort)
+ifndef ARCH
+	ARCH := $(shell $(CC) -dumpmachine)
+endif
+
+# check if were doing a release build
+ifdef BUILD_RELEASE
+BUILD_TYPE=RELEASE
+else
+BUILD_TYPE=DEBUG
+endif
+
+# Use the standard masterbuild variable names
+DEBUG_CFLAG ?= -g
+OPT_CFLAG ?= -O2
+DEBUG_LDFLAG ?= -g
+OPT_LDFLAG ?=
+
+# Optimize & strip all program binaries for release builds
+# otherwise, build with debugging
+ifdef BUILD_RELEASE
+CFLAGS_PROG += $(OPT_CFLAG)
+LDFLAGS_PROG += $(OPT_LDFLAG)
+else
+CFLAGS_PROG += $(DEBUG_CFLAG)
+LDFLAGS_PROG += $(DEBUG_LDFLAG)
+endif
+
+#CFLAGS_PROG += -Wall -Werror -fno-strict-aliasing -pipe $(patsubst %,-I%, $(INCDIRS)) 
+CFLAGS_PROG += -Wall -fno-strict-aliasing -pipe $(patsubst %,-I%, $(INCDIRS)) 
+CXXFLAGS += $(CFLAGS_PROG)
+ifndef NO_THREADS
+ifdef CONFIG_GLIBC
+	LDFLAGS_PROG += -lrt
+endif
+ifdef RMCH_CONFIG_LOADED
+EXTRA_SHLIBS_$(DIR) := $(EXTRA_SHLIBS_$(DIR)) -lpthread -ldl
+else
+EXTRA_SHLIBS += -lpthread -ldl
+endif
+endif
+
+export HPATH
+
+#Install dir
+VERSIONFILE = $(INCLUDEDIR)/linux/version.h
+VERSION     = $(shell awk -F\" '/REL/ {print $$2}' $(VERSIONFILE))
+INSTALLDIR = /lib/modules/$(VERSION)/misc
+
+OBJECT_EXT	= .o
+
+version_include_name = $(TOPDIR)/$(CVS_MODULE_NAME)/version.include
+svninfo_include_name = $(TOPDIR)/svninfo.include
+
+-include $(svninfo_include_name)
+export REVISION_STRING=$(SVN_REVISION_STRING)
+
+ifeq ($(version_include_name),$(wildcard $(version_include_name)))
+include $(version_include_name)
+MAKEFILE_DEPS += $(version_include_name)
+export VERSION_STRING=$(VERSION_RELEASE)
+else
+export VERSION_STRING=$(BUILD_TYPE)
+endif
+
+PLATFORM_CFLAGS += \
+	-DBUILD_TYPE=$(BUILD_TYPE) \
+	-DREVISION_STRING="\"$(REVISION_STRING)\"" \
+	-DVERSION_STRING="\"$(VERSION_STRING)\"" \
+	$(NULL)
+
+#
+# Logging levels are independent of release mode
+#
+ifdef BUILD_RELEASE
+    PLATFORM_CFLAGS += -DBUILD_RELEASE
+    ifeq (,$(strip $(PRODUCTION_LOGGING)$(VERBOSE_LOGGING)))
+	RELEASE_LOGGING=1
+    endif
+else
+    PLATFORM_CFLAGS += -DBUILD_DEBUG
+    ifeq (,$(strip $(PRODUCTION_LOGGING)$(RELEASE_LOGGING)))
+        VERBOSE_LOGGING=1
+    endif
+endif
+
+ifdef PRODUCTION_LOGGING
+    PLATFORM_CFLAGS += -DPRODUCTION_LOGGING
+    ifneq (,$(strip $(RELEASE_LOGGING)$(VERBOSE_LOGGING)))
+        $(error Only one logging mode can be defined at a time)
+    endif
+endif
+
+ifdef VERBOSE_LOGGING
+    PLATFORM_CFLAGS += -DVERBOSE_LOGGING
+    ifneq (,$(strip $(RELEASE_LOGGING)$(PRODUCTION_LOGGING)))
+        $(error Only one logging mode can be defined at a time)
+    endif
+endif
+
+#
+# Provide standard macro for building targets
+#
+define TARGET_DEFINITION
+SRCS_$(1) = $(2)
+CFLAGS_$(1) = $(3)
+LDFLAGS_$(1) = $(4)
+LIBS_$(1) = $(5)
+SHLIBS_$(1) = $(6)
+endef
+
+#
+# Get the list of sources for this target if we are 
+#  building one target.
+#
+ifdef BUILD_ONE_MODULE
+  BUILD_ONE_NAME = $(BUILD_ONE_MODULE)
+else 
+  ifdef BUILD_ONE_KERNLIB
+	BUILD_ONE_NAME = $(BUILD_ONE_KERNLIB)
+  else
+    ifdef BUILD_ONE_PROG
+	  BUILD_ONE_NAME = $(BUILD_ONE_PROG)
+    else 
+      ifdef BUILD_ONE_LIB
+	    BUILD_ONE_NAME = $(BUILD_ONE_LIB)
+      else 
+		ifdef BUILD_ONE_SHLIB
+		  BUILD_ONE_NAME = $(BUILD_ONE_SHLIB)
+		endif
+      endif
+    endif
+  endif
+endif
+
+BUILD_ONE_SRCS = $(SRCS_$(BUILD_ONE_NAME))
+BUILD_ONE_TARGET = $(patsubst %, $(EXE_DIR)/%, $(BUILD_ONE_NAME))
+BUILD_ONE_PLATFORMS = $(PLATFORMS_$(BUILD_ONE_NAME))
+
+cc_target = $(filter $(BUILD_ONE_NAME), $(CC_PROGS)$(CC_LIBS))
+#cxx_srcs = $(filter %.cpp, $(BUILD_ONE_SRCS))
+ifeq ($(cc_target),)
+	BUILD_ONE_CC=$(CXX)
+else
+	BUILD_ONE_CC=$(CC)
+endif
+
+ifndef BIN_ARCH
+	BIN_ARCH=$(ARCH)
+endif
+
+BIN_ARCH_DIR ?= $(BIN_ARCH)
+LIB_ARCH_DIR ?= $(BIN_ARCH)
+OBJ_ARCH ?= $(BIN_ARCH)_$(BUILD_TYPE)
+
+INSTALL_ROOT_DIR?=$(TOPOBJDIR)
+
+OBJ_DIR = .objs_$(OBJ_ARCH)_$(BUILD_ONE_NAME)
+EXE_DIR = .exes_$(OBJ_ARCH)
+MODULE_DIR = $(INSTALL_ROOT_DIR)/bin/modules/$(BIN_ARCH)
+# this used to locate where we get libraries from when linking.  
+DEFAULT_BIN_DIR = $(TOPOBJDIR)/bin/$(BIN_ARCH)
+DEFAULT_LIB_DIR = $(TOPOBJDIR)/lib/$(BIN_ARCH)
+
+map = $(foreach a,$(2),$(call $(1),$(a)))
+
+target_bin_dir = $(INSTALL_ROOT_DIR)/$(if $(call get_variable,BIN,$(1)),$(call get_variable,BIN,$(1)),$(if $(call get_variable,BIN_$(DIR)),$(call get_variable,BIN_$(DIR)),bin))/$(BIN_ARCH_DIR)
+target_lib_dir = $(INSTALL_ROOT_DIR)/$(if $(call get_variable,LIB,$(1)),$(call get_variable,LIB,$(1)),$(if $(call get_variable,LIB_$(DIR)),$(call get_variable,LIB_$(DIR)),lib))/$(LIB_ARCH_DIR)
+target_get_platforms = $(if $(call get_variable,PLATFORMS,$(1)),$(call get_variable,PLATFORMS,$(1)),$(if $(call get_variable,PLATFORMS_$(DIR)),$(call get_variable,PLATFORMS_$(DIR)),$(DEFAULT_PLATFORMS)))
+target_test_platform = $(if $(filter $(PLATFORM),$(call target_get_platforms,$(1))),$(1))
+get_variable = $(if $($(1)_$(2)),$($(1)_$(2)),$($(1)))
+dir_test = $(if $(wildcard $(1)/Makefile),$(1))
+
+PLATFORM_TARGET_PROGS = $(call map,target_test_platform,$(TARGET_PROGS)) 
+PLATFORM_TARGET_LIBS = $(call map,target_test_platform,$(TARGET_LIBS))
+PLATFORM_TARGET_SHLIBS = $(call map,target_test_platform,$(TARGET_SHLIBS))
+
+PLATFORM_ND_TARGET_PROGS = $(call map,target_test_platform,$(ND_TARGET_PROGS)) 
+PLATFORM_ND_TARGET_LIBS = $(call map,target_test_platform,$(ND_TARGET_LIBS))
+PLATFORM_ND_TARGET_SHLIBS = $(call map,target_test_platform,$(ND_TARGET_SHLIBS))
+
+DEPEND_CFLAGS = -Wp,-MD,$(@).d -Wp,-MT,$@
+
+wildcard_dependencies = $(wildcard .objs_$(OBJ_ARCH)_$(1)/*.d)
+
+ifdef USE_RMCH
+RMCH_CONFIG_LOADED = 1
+
+MAKEFILE_DEPS += \
+	$(PROJECT_BUILD)/rules.mk \
+	$(PROJECT_BUILD)/target.mk \
+	$(NULL)
+
+OBJ_DIR = .objs_$(OBJ_ARCH)_$(1)
+
+obj_path = $(patsubst %,$(OBJDIR)/$(OBJ_DIR)/%$(OBJECT_EXT),$(notdir $(basename $(2))))
+obj_path2 = $(OBJDIR)/$(OBJ_DIR)/$(notdir $(basename $(2)))$(OBJECT_EXT)
+
+DEPEND_CFLAGS = -Wp,-MD,$$(@).d -Wp,-MT,$$@
+
+wildcard_dependencies = $(wildcard $(OBJDIR)/$(OBJ_DIR)/*.d)
+
+define gen_target_defs
+FULL_SRCS_$(1) := $(FULL_SRCS_$(1)) $(filter $(TOPSRCDIR)/%,$(SRCS_$(1))) $(addprefix $(SRCDIR)/,$(filter-out $(TOPSRCDIR)/%,$(SRCS_$(1))))
+FULL_OBJS_$(1) := $(FULL_OBJS_$(1)) $(call obj_path,$(1),$(SRCS_$(1)))
+endef
+
+define generate_cpp_rule
+$(call obj_path2,$(1),$(2)): $(2) $(DEPS_$(1)) $(DEPS_$(2)) $(DEPS_$(DIR))
+	@mkdir -p $$(@D)
+	@echo building1 $$(@F)
+	$(QUIET) $(CXX) $(DEPEND_CFLAGS) $(CXXFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_PROG_$(DIR)) $(CFLAGS_$(1)) -c $$< -o $$@
+
+# Extra line required
+endef
+
+define generate_c_rule
+$(call obj_path2,$(1),$(2)): $(2) $(DEPS_$(1)) $(DEPS_$(2)) $(DEPS_$(DIR))
+	@mkdir -p $$(@D)
+	@echo building2 $$(@F)
+	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS_PROG) $(PLATFORM_CFLAGS) $(CFLAGS_PROG_$(DIR)) $(CFLAGS_$(1)) -c $$< -o $$@
+
+# Extra line required
+endef
+
+define generate_compile_rules
+$(foreach f,$(filter %.cpp,$(FULL_SRCS_$(1))),$(eval $(call generate_cpp_rule,$(1),$(f))))
+
+$(foreach f,$(filter %.c,$(FULL_SRCS_$(1))),$(eval $(call generate_c_rule,$(1),$(f))))
+
+endef
+
+define stage_target_files
+	@echo "Copying $(1) to $(2)"
+	@mkdir -p $(2)
+	@$(CP) $(1) $(2)
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-unneeded $(2)/$$(@F)
+endif
+endef
+
+define create_rule_target_libs
+.PHONY: $(1)
+
+$(1): $(DEFAULT_LIB_DIR)/$(1).a
+ifndef NO_SHAREDLIB_$(1)
+$(1): $(DEFAULT_LIB_DIR)/$(1).so
+endif
+
+$(OBJDIR)/$(EXE_DIR)/$(1).a: $(DEPS_$(1)) $(DEPS_$(DIR)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(1)) $(LIBS_$(DIR)) $(LIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.so, $(SHLIBS_$(1)) $(SHLIBS_$(DIR)) $(SHLIBS)) \
+	$(FULL_OBJS_$(1)) $(EXTRA_OBJECTS_$(1))
+	@mkdir -p $$(@D)
+	@echo Static lib $$(@F)
+	$(QUIET) rm -f $$@
+	$(QUIET) $(AR) rcs $$@ $(FULL_OBJS_$(1)) $(EXTRA_OBJECTS_$(1))
+
+$(DEFAULT_LIB_DIR)/$(1).a: $(OBJDIR)/$(EXE_DIR)/$(1).a
+	$(call stage_target_files,$$<,$(call target_lib_dir,$$@))
+
+ifndef NO_SHAREDLIB_$(1)
+$(OBJDIR)/$(EXE_DIR)/$(1).so: $(DEPS_$(1)) $(DEPS_$(DIR))  \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(1)) $(LIBS_$(DIR)) $(LIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.so, $(SHLIBS_$(1)) $(SHLIBS_$(DIR)) $(SHLIBS)) \
+	$(FULL_OBJS_$(1))
+	@mkdir -p $$(@D)
+	@echo Shared lib $$(@F)
+	$(QUIET) $(BUILD_ONE_CC) -shared -Wl,-rpath-link,$(DEFAULT_LIB_DIR) \
+	-L$(DEFAULT_LIB_DIR) $(FULL_OBJS_$(1)) $(EXTRA_OBJECTS) -o $$@ \
+	$(LDFLAGS_$(1)) $(LDFLAGS_PROG) $(LDFLAGS) \
+	$(patsubst %, -l%,$(SHLIBS_$(1)) $(SHLIBS_$(DIR)) $(SHLIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(1)) $(LIBS_$(DIR)) $(LIBS)) \
+	$(EXTRA_SHLIBS_$(1)) $(EXTRA_SHLIBS_$(DIR)) $(EXTRA_SHLIBS) \
+	$(EXTRA_LIBS_$(1)) $(EXTRA_LIBS_$(DIR)) $(EXTRA_LIBS)
+
+$(DEFAULT_LIB_DIR)/$(1).so: $(OBJDIR)/$(EXE_DIR)/$(1).so
+	$(call stage_target_files,$$<,$(call target_lib_dir,$$@))
+endif
+
+$(call generate_compile_rules,$(1))
+
+CLEAN_OBJS := $(CLEAN_OBJS) $(OBJDIR)/$(EXE_DIR)/$(1).a  $(OBJDIR)/$(EXE_DIR)/$(1).so $(FULL_OBJS_$(1)) $(addsuffix .d,$(FULL_OBJS_$(1)))
+REALCLEAN_OBJS := $(REALCLEAN_OBJS) $(OBJDIR)/$(EXE_DIR) $(OBJDIR)/$(OBJ_DIR)
+
+endef
+
+define create_rule_target_progs
+.PHONY: $(1)
+
+$(1): $(DEFAULT_BIN_DIR)/$(1)
+
+$(DEFAULT_BIN_DIR)/$(1): $(OBJDIR)/$(EXE_DIR)/$(1)	
+	$(call stage_target_files,$$<,$(call target_bin_dir,$$@))
+
+$(OBJDIR)/$(EXE_DIR)/$(1):  $(DEPS_$(1)) $(DEPS_$(DIR)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(1)) $(LIBS_$(DIR)) $(LIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.so, $(SHLIBS_$(1)) $(SHLIBS_$(DIR)) $(SHLIBS)) \
+	$(FULL_OBJS_$(1))
+	@mkdir -p $$(@D)
+	@echo Program $$(@F)
+	$(QUIET) $(BUILD_ONE_CC) -Wl,-rpath-link,$(DEFAULT_LIB_DIR) \
+	-L$(DEFAULT_LIB_DIR) $(FULL_OBJS_$(1)) $(EXTRA_OBJECTS) -o $$@ \
+	$(LDFLAGS_$(1)) $(LDFLAGS_PROG) $(LDFLAGS) \
+	$(patsubst %, -l%,$(SHLIBS_$(1)) $(SHLIBS_$(DIR)) $(SHLIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(1)) $(LIBS_$(DIR)) $(LIBS)) \
+	$(EXTRA_SHLIBS_$(1)) $(EXTRA_SHLIBS_$(DIR)) $(EXTRA_SHLIBS) \
+	$(EXTRA_LIBS_$(1)) $(EXTRA_LIBS_$(DIR)) $(EXTRA_LIBS)
+
+$(call generate_compile_rules,$(1))
+
+CLEAN_OBJS := $(CLEAN_OBJS) $(OBJDIR)/$(EXE_DIR)/$(1) $(FULL_OBJS_$(1)) $(addsuffix .d,$(FULL_OBJS_$(1)))
+REALCLEAN_OBJS := $(REALCLEAN_OBJS) $(OBJDIR)/$(EXE_DIR) $(OBJDIR)/$(OBJ_DIR)
+
+endef
+
+endif # USE_RMCH
+
+# Setup first rule here so that it will call the real 'all' target instead
+# of the first rule that gets generated by subsequent makefiles
+default: all

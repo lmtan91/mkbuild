@@ -1,0 +1,12 @@
+# -*- makefile -*-
+PLATFORM_CFLAGS += -DCDI_IOCTL_DEFINITIONS="\"ioctl_magic.h\""
+ifndef BIN_ARCH
+	BIN_ARCH=
+endif
+
+# Enable PIC
+ifndef NO_PIC
+PLATFORM_CFLAGS += -fPIC
+endif
+
+CONFIG_GLIBC=yes

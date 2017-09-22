@@ -1,0 +1,288 @@
+# -*-makefile-*-
+#
+all : $(DEPS_PRE_SUBDIRS) sub_dirs $(DEPS_POST_SUBDIRS) \
+		$(DEPS) $(PLATFORM_TARGET_LIBS) $(PLATFORM_TARGET_SHLIBS) \
+		$(PLATFORM_TARGET_PROGS) $(PLATFORM_TARGET_MODULES) \
+		$(PLATFORM_TARGET_KERNLIBS) $(INSTALL)
+
+#
+# This is some Make black-magic to get a list of targets into a
+#  list of the source files for all of those targets.  These are 
+#  makefile functions used with the call function.  map will take 
+#  a list $(2) and call the funtion $(1) for every element in the 
+#  list.  The function srcs will take a target name an return the 
+#  sources of that target.
+# 
+srcs = $(SRCS_$(1))
+clean_objs = $(patsubst %, .objs_$(OBJ_ARCH)_$(1)/%$(OBJECT_EXT), $(call obj_path_fix,$(basename $(filter-out $(NOCLEAN_$(1)),$(SRCS_$(1))))))
+clean_deps = $(patsubst %, .objs_$(OBJ_ARCH)_$(1)/%$(OBJECT_EXT).d, $(call obj_path_fix,$(basename $(filter-out $(NOCLEAN_$(1)),$(SRCS_$(1))))))
+obj_path_fix = $(shell echo $1 | sed 's/ \(\.\.\/\)\+/ /g')
+
+TARGET_OBJECTS = $(patsubst %, $(OBJ_DIR)/%$(OBJECT_EXT), $(call obj_path_fix,$(basename $(BUILD_ONE_SRCS))))
+#EXTRA_OBJECTS = $(patsubst %, $(OBJ_DIR)/%, $(EXTRA_OBJS_$(BUILD_ONE_NAME)) )
+
+# TARGET_ARCS_* are used for dependency tracking
+# (except TARGET_ARCS_KERNEL, which is used to link as well)
+TARGET_ARCS_SHLIBS = \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(BUILD_ONE_NAME)) $(LIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.so, $(SHLIBS_$(BUILD_ONE_NAME)) $(SHLIBS)) \
+	$(NULL)
+TARGET_ARCS_PROG = \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(BUILD_ONE_NAME)) $(LIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.so, $(SHLIBS_$(BUILD_ONE_NAME)) $(SHLIBS)) \
+	$(NULL)
+TARGET_ARCS_KERNEL = \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(BUILD_ONE_NAME)) $(KERNLIBS)) \
+	$(KERNLIBS_$(BUILD_ONE_NAME)) \
+	$(NULL)
+#
+# LDFLAGS_PROG is used to link executables & shared libraries
+LDFLAGS_PROG += $(LDFLAGS) -Wl,-rpath-link,$(DEFAULT_LIB_DIR) -L$(DEFAULT_LIB_DIR) \
+	$(patsubst %, -l%,$(SHLIBS_$(BUILD_ONE_NAME)) $(SHLIBS)) \
+	$(patsubst %, $(DEFAULT_LIB_DIR)/lib%.a, $(LIBS_$(BUILD_ONE_NAME)) $(LIBS)) \
+	$(EXTRA_SHLIBS_$(BUILD_ONE_NAME)) $(EXTRA_SHLIBS) \
+	$(EXTRA_LIBS_$(BUILD_ONE_NAME)) $(EXTRA_LIBS)
+
+ALL_TARGETS = $(TARGET_MODULES) $(TARGET_PROGS) $(TARGET_LIBS) $(TARGET_SHLIBS) $(TARGET_KERNLIBS)
+ALL_SRCS = $(call map,srcs,$(ALL_TARGETS))
+CLEAN_ALL_OBJECTS = $(call map,clean_objs,$(ALL_TARGETS)) $(call map,clean_deps,$(ALL_TARGETS))
+CLEAN_ALL_TARGETS += $(TARGET_MODULES) \
+	$(patsubst %, $(EXE_DIR)/%, $(TARGET_PROGS:=$(PROG_SUFFIX))) \
+	$(patsubst %, $(EXE_DIR)/%, $(TARGET_LIBS)) \
+	$(patsubst %, $(EXE_DIR)/%, $(TARGET_KERNLIBS)) \
+	.depend \
+	$(NULL)
+ALL_OBJ_DIRS = $(patsubst %, .objs_$(OBJ_ARCH)_%, $(ALL_TARGETS))
+ALL_GARBAGE += $(wildcard *~ \#* core.[0-9]*)
+
+# Due to recursive nature of the build system,
+# only process dependencies for specific target to reduce overhead
+ifneq (,$(BUILD_ONE_MODULE)$(BUILD_ONE_KERNLIB)$(BUILD_ONE_PROG)$(BUILD_ONE_LIB))
+GEN_DEPS := $(foreach t,$(BUILD_ONE_MODULE)$(BUILD_ONE_KERNLIB)$(BUILD_ONE_PROG)$(BUILD_ONE_LIB),$(call wildcard_dependencies,$t))
+ifneq (,$(strip $(GEN_DEPS)))
+include $(GEN_DEPS)
+endif
+endif
+
+ifdef BUILD_ONE_MODULE
+$(BUILD_ONE_MODULE) : $(MAKEFILE_DEPS) $(TARGET_OBJECTS) $(TARGET_ARCS_KERNEL)
+ifdef KERNEL_2_6
+	$(MAKE) -C $(KERNEL_BUILD_DIR) M=$(MODULE_BUILD_DIR) modules ARCH=$(MODULE_ARCH) EXTRA_CFLAGS="$(PLATFORM_CFLAGS)" CC="$(CC)" LD="$(LD)" OBJDUMP="$(OBJDUMP)" KBUILD_VERBOSE=1 $(BUILD_ONE_MODULE:.o=)-objs="$(TARGET_OBJECTS) $(KERNLIBS_$(BUILD_ONE_MODULE))"
+else
+	@echo Linking $(notdir $@)
+	$(QUIET) $(LD) $(LDFLAGS_$(BUILD_ONE_NAME)) -r $(TARGET_OBJECTS) $(TARGET_ARCS_KERNEL) $(EXTRA_OBJECTS) -o $@
+endif
+else
+$(TARGET_MODULES) : dummy
+	@echo "Building module $@"
+	@$(MAKE) BUILD_ONE_MODULE=$@ CFLAGS="$(CFLAGS_KERNEL)" $@
+	@echo "Copying $@ to $(MODULE_DIR)"
+	@mkdir -p $(MODULE_DIR)
+ifdef KERNEL_2_6
+	@$(CP) $(@:.o=.ko) $(MODULE_DIR)
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-debug $(MODULE_DIR)/$(@:.o=.ko)
+endif
+else
+	@$(CP) $@ $(MODULE_DIR)
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-debug $(MODULE_DIR)/$@
+endif
+endif
+endif
+
+ifdef BUILD_ONE_KERNLIB
+$(BUILD_ONE_KERNLIB) : $(BUILD_ONE_TARGET) ;
+
+$(BUILD_ONE_TARGET) : $(MAKEFILE_DEPS) $(TARGET_OBJECTS)
+	@mkdir -p $(EXE_DIR)
+	@echo archiving $(notdir $@)
+	$(QUIET) rm -f $@
+	$(QUIET) $(AR) rcs $@ $(filter-out $(MAKEFILE_DEPS),$^) $(EXTRA_OBJECTS)
+else
+$(TARGET_KERNLIBS) : dummy
+	@echo "Building kernel library $@"
+#	echo $(call obj_path_fix,$(basename $(SRCS_$@)))
+	@$(MAKE) BUILD_ONE_KERNLIB=$@ CFLAGS="$(CFLAGS_KERNEL)" $@
+	@echo "Copying $@ to $(call target_lib_dir,$@)"
+	mkdir -p $(call target_lib_dir,$@)
+	$(CP) $(EXE_DIR)/$@ $(call target_lib_dir,$@)
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-debug $(call target_lib_dir,$@)/$@
+endif
+endif
+
+
+ifdef BUILD_ONE_PROG
+#$(TARGET_ARCS) : dummy
+#	@$(MAKE) -C $(dir $@)
+
+$(BUILD_ONE_PROG) : $(BUILD_ONE_TARGET) ;
+
+$(BUILD_ONE_TARGET) : $(MAKEFILE_DEPS) $(TARGET_OBJECTS) $(TARGET_ARCS_PROG)
+	@mkdir -p $(EXE_DIR)
+	@echo Linking $(notdir $@$(PROG_SUFFIX))
+	$(QUIET) $(BUILD_ONE_CC) -L$(DEFAULT_LIB_DIR) $(TARGET_OBJECTS) $(EXTRA_OBJECTS) -o $@$(PROG_SUFFIX) $(LDFLAGS_$(BUILD_ONE_NAME)) $(LDFLAGS_PROG)
+else
+$(TARGET_PROGS) : dummy
+	@echo "Building prog $@$(PROG_SUFFIX)"
+	@$(MAKE) BUILD_ONE_PROG=$@ CFLAGS="$(CFLAGS_PROG)" $@
+	@echo "Copying $@$(PROG_SUFFIX) to $(call target_bin_dir,$@$(PROG_SUFFIX))"
+	@mkdir -p $(call target_bin_dir,$@)
+	@$(CP) $(EXE_DIR)/$@$(PROG_SUFFIX) $(call target_bin_dir,$@$(PROG_SUFFIX))
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-unneeded $(call target_bin_dir,$@$(PROG_SUFFIX))/$@$(PROG_SUFFIX)
+endif
+endif 
+
+
+ifdef BUILD_ONE_LIB 
+
+ifdef NO_SHAREDLIB
+$(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a;
+else
+$(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a $(BUILD_ONE_TARGET).so;
+endif
+
+$(BUILD_ONE_TARGET).a : $(MAKEFILE_DEPS) $(TARGET_OBJECTS)
+	@mkdir -p $(EXE_DIR)
+	@echo archiving $(notdir $@)
+	$(QUIET) rm -f $@
+	$(QUIET) $(AR) rcs $@ $(filter-out $(MAKEFILE_DEPS),$^) $(EXTRA_OBJECTS)
+
+$(BUILD_ONE_TARGET).so : $(MAKEFILE_DEPS) $(TARGET_OBJECTS) $(TARGET_ARCS_SHLIBS)
+	@mkdir -p $(EXE_DIR)
+	@echo Building shared lib $(notdir $@)
+	$(QUIET) $(BUILD_ONE_CC) -shared -L$(DEFAULT_LIB_DIR) $(TARGET_OBJECTS) $(EXTRA_OBJECTS) -o $@ $(LDFLAGS_$(BUILD_ONE_NAME)) $(LDFLAGS_PROG)
+else
+$(TARGET_LIBS) : dummy
+	@echo "Building lib $@"
+	@$(MAKE) BUILD_ONE_LIB=$@ CFLAGS="$(CFLAGS_PROG)" $@
+	@echo "Copying $@ to $(call target_lib_dir,$@)"
+	@mkdir -p $(call target_lib_dir,$@)
+	@$(CP) $(EXE_DIR)/$@.a $(call target_lib_dir,$@)
+ifndef NO_SHAREDLIB
+	@$(CP) $(EXE_DIR)/$@.so $(call target_lib_dir,$@)
+endif
+ifdef ENABLE_STRIP
+	$(QUIET) $(STRIP) --strip-unneeded $(call target_lib_dir,$@)/$@.a
+ifndef NO_SHAREDLIB
+	$(QUIET) $(STRIP) --strip-unneeded $(call target_lib_dir,$@)/$@.so 
+endif
+endif
+endif 
+
+$(OBJ_DIR)/%.o : %.cpp $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building3 $(@F)
+	$(QUIET) $(CXX) $(DEPEND_CFLAGS) $(CXXFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+$(OBJ_DIR)/%.o : %.c $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building4 $(@F)
+	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+$(OBJ_DIR)/%.o : %.S $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building5 $(@F)
+	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+# Keep these rules in-sync with the ones above
+$(OBJ_DIR)/%.o : $(TOPDIR)/%.cpp $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building6 $(@F)
+	$(QUIET) $(CXX) $(DEPEND_CFLAGS) $(CXXFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+$(OBJ_DIR)/%.o : $(TOPDIR)/%.c $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building7 $(@F)
+	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+$(OBJ_DIR)/%.o : $(TOPDIR)/%.S $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo building8 $(@F)
+	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+sub_dirs : $(patsubst %,_dir_%, $(call map,dir_test,$(SUBDIRS)))
+
+clean : dummy $(patsubst %, _clean_%, $(call map,dir_test,$(SUBDIRS)))
+	$(QUIET) $(MAKE) clean-norecurse
+
+clean-norecurse: $(CLEAN_DEPS)
+	@echo "Cleaning..."
+	$(QUIET) rm -f $(EXTRA_CLEAN) $(CLEAN_ALL_OBJECTS) $(CLEAN_ALL_TARGETS)
+
+real-clean-subdirs : dummy $(patsubst %, _real_clean_%, $(call map,dir_test,$(SUBDIRS))) $(REAL_CLEAN_DEPS)
+	$(QUIET) $(MAKE) clean-norecurse
+	rm -rf $(ALL_OBJ_DIRS) $(EXE_DIR)
+	rm -f $(subst #,\#,$(ALL_GARBAGE))
+	$(QUIET) rm -f $(patsubst %, $(BIN_DIR)/%, $(TARGET_PROGS:=$(PROG_SUFFIX)))
+	$(QUIET) rm -f $(patsubst %, $(MODULE_DIR)/%, $(TARGET_MODULES))
+
+dist-clean-subdirs: dummy $(patsubst %, _dist_clean_%, $(call map,dir_test,$(SUBDIRS))) $(REAL_CLEAN_DEPS) $(DIST_CLEAN_DEPS)
+	$(QUIET) $(MAKE) clean-norecurse
+	$(QUIET) rm -rf .objs_* .exes_* $(ALL_OBJ_DIRS)
+	$(QUIET) rm -rf $(subst /$(BIN_ARCH_DIR),,$(foreach p,$(TARGET_PROGS:=$(PROG_SUFFIX)), $(call target_bin_dir,$p)))
+	$(QUIET) rm -rf $(subst /$(LIB_ARCH_DIR),,$(foreach p,$(TARGET_PROGS:=$(PROG_SUFFIX)), $(call target_lib_dir,$p)))
+	$(QUIET) rm -f $(subst #,\#,$(ALL_GARBAGE))
+
+dep depend : 
+	@echo "Dependencies are generated by the compiler at build time"
+
+extdeps: $(DEPS_PRE_SUBDIRS)
+
+ifdef SUBDIRS
+$(patsubst %, _dir_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _dir_%,%,$@) 
+
+$(patsubst %, _clean_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _clean_%,%,$@) clean
+
+$(patsubst %, _real_clean_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _real_clean_%,%,$@) real-clean-subdirs
+
+$(patsubst %, _dist_clean_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _dist_clean_%,%,$@) dist-clean-subdirs
+
+$(patsubst %, _dep_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _dep_%,%,$@) dep
+
+$(SUBDIRS) : dummy
+	$(MAKE) -C $@ DEFAULT_TARGET_NAME=$@
+endif
+
+real-clean realclean: real-clean-subdirs
+
+distclean: dist-clean-subdirs
+
+dummy:
+
+ifdef PGP_SOURCES
+
+encrypt : $(patsubst %,%.pgp,$(PGP_SOURCES))
+
+decrypt : $(patsubst %,%.pgp,$(PGP_SOURCES))
+	gpg --decrypt-files $<
+
+%.pgp : %
+	rm -f $<.gpg
+	gpg --encrypt-files $(patsubst %,-r %,$(PGP_RECIPIENTS)) $<
+	mv $<.gpg $@
+
+endif
+
+apply_patches:
+	@set -e ; \
+	pfiles="$(wildcard $(TOPDIR)/patches/$(PROJECT_NAME)/*.patch)" ; \
+	if [ -n "$$pfiles" -a -x $(TOPDIR)/patches/patch-kernel-jethead.sh ]; then \
+		$(TOPDIR)/patches/patch-kernel-jethead.sh $(TOPDIR) $(TOPDIR)/patches/$(PROJECT_NAME) \*.patch ; \
+	fi
+
+unapply_patches:
+	@set -e ; \
+	pfiles="$(wildcard $(TOPDIR)/patches/$(PROJECT_NAME)/*.patch)" ; \
+	if [ -n "$$pfiles" -a -x $(TOPDIR)/patches/patch-kernel-jethead.sh ]; then \
+		$(TOPDIR)/patches/patch-kernel-jethead.sh -R $(TOPDIR) $(TOPDIR)/patches/$(PROJECT_NAME) \*.patch ; \
+	fi
+
+.PHONY: dummy clean clean-norecurse real-clean real-clean-subdirs apply_patches unapply_patches FORCE
