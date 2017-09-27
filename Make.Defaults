@@ -42,7 +42,7 @@ ifndef PLATFORM
 endif
 export PLATFORM
 
-DEFAULT_PLATFORMS = LinuxPC Broadcom BroadcomBE Broadcom26 Broadcom_C Broadcom_D Broadcom_E Broadcom_F Broadcom_G ST Conexant Horizon Horizon_A IntelC NXP225 NXP_B
+DEFAULT_PLATFORMS = LinuxPC 
 
 MAKEFILE_DEPS += Makefile \
 	$(PROJECT_BUILD)/Make.Defaults \
