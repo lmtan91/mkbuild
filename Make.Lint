@@ -1,0 +1,89 @@
+##################################################################
+#        Makefile for static analysis for the application        #
+##################################################################
+MAKE_FILE_ROOT ?= .
+
+export RTSPSERVER_APP_DIR = $(CURDIR)
+export RTSPSERVER_ASW_SOURCE_DIR = $(MAKE_FILE_ROOT)/../Prog/Asw
+export RTSPSERVER_DE_SOURCE_DIR = $(MAKE_FILE_ROOT)/../Prog/De
+export RTSPSERVER_SRVC_SOURCE_DIR = $(MAKE_FILE_ROOT)/../Prog/Srvc
+
+#List all the application header file under variable RTSPSERVER_INCLUDES
+export RTSPSERVER_INCLUDES = \
+	
+#List all the application source file under variable RTSPSERVER_ASW_SOURCE_FILES in a similar pattern as below
+export RTSPSERVER_ASW_SOURCE_FILES = \
+	$(RTSPSERVER_ASW_SOURCE_DIR)/IpcMngr/IpcMngr.c             \
+	\
+	$(RTSPSERVER_ASW_SOURCE_DIR)/Main/Main.c				   \
+	\
+	$(RTSPSERVER_ASW_SOURCE_DIR)/StreamMngr/StreamMngr.c       \
+	$(RTSPSERVER_ASW_SOURCE_DIR)/StreamMngr/StreamRecord.c     \
+
+export RTSPSERVER_DE_SOURCE_FILES += \
+	\
+	$(RTSPSERVER_DE_SOURCE_DIR)/Rtc/Rtc.c					   \
+	
+export RTSPSERVER_SRVC_SOURCE_FILES += \
+	$(RTSPSERVER_SRVC_SOURCE_DIR)/Ipc/Ipc.c                    \
+	\
+	$(RTSPSERVER_SRVC_SOURCE_DIR)/Log/Log.c			           \
+	\
+	$(RTSPSERVER_SRVC_SOURCE_DIR)/Misc/Misc.c				   \
+	\
+	\
+	$(RTSPSERVER_SRVC_SOURCE_DIR)/Thread/Thread.c			   \
+
+include $(MAKE_FILE_ROOT)/Make.Defaults
+
+# remove zcam sdk header related errors
+# inconsistent in defining the same struct
+ESYM_SDK = -esym\(126,timeval\)
+ESYM_SDK += -e451
+ESYM_SDK += -esym\(849,GTraverseFlags\)
+# lia1hc - fix Info 793: ANSI/ISO limit of 31 'significant characters in an external identifier'
+# exceeded -- processing is unaffected
+ESYM_SDK += -estring\(793,*significant*characters*\)
+ESYM_SDK += -esym\(740,G_OBJECT*\)
+
+RTSPSERVER_CONFIG_LINT += -DLINT
+# Lint flags
+LINT_CONFIG = \
+	-b +os\(rtspserverLint.log\) -e123 +v \
+	$(RTSPSERVER_EXTERNAL_EXCLUDES_LINT) $(RTSPSERVER_EXTERNAL_INCLUDES_LINT) $(RTSPSERVER_LINT_CONFIG) \
+	$(RTSPSERVER_INCLUDES_LINT) $(RTSPSERVER_LINT_CONFIG_FILE) $(RTSPSERVER_CONFIG_LINT) $(ESYM_SDK) 
+  
+# Object files
+RTSPSERVER_ASW_APP_LINT_FILES = $(patsubst $(RTSPSERVER_ASW_SOURCE_DIR)/%.c, %.lob, $(RTSPSERVER_ASW_SOURCE_FILES))
+RTSPSERVER_DE_APP_LINT_FILES += $(patsubst $(RTSPSERVER_DE_SOURCE_DIR)/%.c, %.lob, $(RTSPSERVER_DE_SOURCE_FILES))
+RTSPSERVER_SRVC_APP_LINT_FILES += $(patsubst $(RTSPSERVER_SRVC_SOURCE_DIR)/%.c, %.lob, $(RTSPSERVER_SRVC_SOURCE_FILES))
+
+#This variable holds the depedency files for the application include files.
+
+RTSPSERVER_ASW_LINT_FILES = $(addprefix $(RTSPSERVER_BUILD_APP_LINT_PATH)/, $(RTSPSERVER_ASW_APP_LINT_FILES))
+RTSPSERVER_DE_LINT_FILES = $(addprefix $(RTSPSERVER_BUILD_APP_LINT_PATH)/, $(RTSPSERVER_DE_APP_LINT_FILES))
+RTSPSERVER_SRVC_LINT_FILES = $(addprefix $(RTSPSERVER_BUILD_APP_LINT_PATH)/, $(RTSPSERVER_SRVC_APP_LINT_FILES))
+
+.PHONY: lint		  
+lint: $(RTSPSERVER_ASW_LINT_FILES) $(RTSPSERVER_DE_LINT_FILES) $(RTSPSERVER_SRVC_LINT_FILES)
+	@$(LINT_EXE) $(LINT_CONFIG) $(RTSPSERVER_ASW_LINT_FILES) $(RTSPSERVER_DE_LINT_FILES) $(RTSPSERVER_SRVC_LINT_FILES)
+	@echo "Lint End"
+
+$(RTSPSERVER_BUILD_APP_LINT_PATH)/%.lob: $(RTSPSERVER_ASW_SOURCE_DIR)/%.c
+	@mkdir -p $(@D)
+	@$(LINT_EXE) -u $(LINT_CONFIG) $< -oo[$@]
+	
+$(RTSPSERVER_BUILD_APP_LINT_PATH)/%.lob: $(RTSPSERVER_DE_SOURCE_DIR)/%.c 
+	@mkdir -p $(@D)
+	@$(LINT_EXE) -u $(LINT_CONFIG) $< -oo[$@]
+
+$(RTSPSERVER_BUILD_APP_LINT_PATH)/%.lob: $(RTSPSERVER_SRVC_SOURCE_DIR)/%.c
+	@mkdir -p $(@D)
+	@$(LINT_EXE) -u $(LINT_CONFIG) $< -oo[$@]
+
+.PHONY: cleanlint
+cleanlint:
+	@echo "Cleaning lint output files"
+	@$(RMDIRS) $(RTSPSERVER_BUILD_APP_LINT_PATH)
+	@$(RMDIRS) $(RTSPSERVER_APP_DEBUG_DIR)
+	@$(RMDIRS) rtspserverLint.log
