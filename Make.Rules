@@ -19,6 +19,7 @@ clean_deps = $(patsubst %, .objs_$(OBJ_ARCH)_$(1)/%$(OBJECT_EXT).d, $(call obj_p
 obj_path_fix = $(shell echo $1 | sed 's/ \(\.\.\/\)\+/ /g')
 
 TARGET_OBJECTS = $(patsubst %, $(OBJ_DIR)/%$(OBJECT_EXT), $(call obj_path_fix,$(basename $(BUILD_ONE_SRCS))))
+TARGET_LOBS = $(patsubst %, $(OBJ_DIR)/%$(LOB_EXT), $(call obj_path_fix,$(basename $(BUILD_ONE_SRCS))))
 #EXTRA_OBJECTS = $(patsubst %, $(OBJ_DIR)/%, $(EXTRA_OBJS_$(BUILD_ONE_NAME)) )
 
 # TARGET_ARCS_* are used for dependency tracking
@@ -141,7 +142,11 @@ ifdef BUILD_ONE_LIB
 ifdef NO_SHAREDLIB
 $(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a;
 else
+ifdef NO_LINT
 $(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a $(BUILD_ONE_TARGET).so;
+else
+$(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).lint
+endif
 endif
 
 $(BUILD_ONE_TARGET).a : $(MAKEFILE_DEPS) $(TARGET_OBJECTS)
@@ -154,6 +159,9 @@ $(BUILD_ONE_TARGET).so : $(MAKEFILE_DEPS) $(TARGET_OBJECTS) $(TARGET_ARCS_SHLIBS
 	@mkdir -p $(EXE_DIR)
 	@echo Building shared lib $(notdir $@)
 	$(QUIET) $(BUILD_ONE_CC) -shared -L$(DEFAULT_LIB_DIR) $(TARGET_OBJECTS) $(EXTRA_OBJECTS) -o $@ $(LDFLAGS_$(BUILD_ONE_NAME)) $(LDFLAGS_PROG)
+
+$(BUILD_ONE_TARGET).lint : $(MAKEFILE_DEPS) $(TARGET_LOBS) $(TARGET_ARCS_SHLIBS)
+	$(LINT_CXX) $(TARGET_LOBS)
 else
 $(TARGET_LIBS) : dummy
 	@echo "Building lib $@"
@@ -177,10 +185,20 @@ $(OBJ_DIR)/%.o : %.cpp $(MAKEFILE_DEPS)
 	@echo building3 $(@F)
 	$(QUIET) $(CXX) $(DEPEND_CFLAGS) $(CXXFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
 
+$(OBJ_DIR)/%.lob : %.cpp $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo Lint building $(@F)
+	$(LINT_CXX) -u $(LINT_CONFIG) $(LINT_CXXFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) $< -oo[$@]
+
 $(OBJ_DIR)/%.o : %.c $(MAKEFILE_DEPS)
 	@mkdir -p $(@D)
 	@echo building4 $(@F)
 	$(QUIET) $(CC) $(DEPEND_CFLAGS) $(CFLAGS) $(PLATFORM_CFLAGS) $(CFLAGS_$(BUILD_ONE_NAME)) $(CFLAGS_$(notdir $@)) -c $< -o $@
+
+$(OBJ_DIR)/%.lob : %.c $(MAKEFILE_DEPS)
+	@mkdir -p $(@D)
+	@echo Lint building c file $(@F)
+	$(LINT_CC) -u $(LINT_CONFIG) $(LINT_CFLAGS_PROG) $< -oo[$@]
 
 $(OBJ_DIR)/%.o : %.S $(MAKEFILE_DEPS)
 	@mkdir -p $(@D)
