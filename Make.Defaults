@@ -84,17 +84,19 @@ DEFAULT_OBJCOPY ?=$(DEFAULT_TOOLCHAIN_PREFIX)objcopy
 DEFAULT_OBJDUMP ?=$(DEFAULT_TOOLCHAIN_PREFIX)objdump
 PERL            ?= perl
 
-AS      =$(DEFAULT_AS)
-LD      =$(DEFAULT_LD)
-CC      =$(DISTCC) $(DEFAULT_CC)
-CPP     =$(DEFAULT_CPP)
-CXX     =$(DISTCC) $(DEFAULT_CXX)
-AR      =$(DEFAULT_AR)
-RANLIB  =$(DEFAULT_RANLIB)
-NM      =$(DEFAULT_NM)
-STRIP   =$(DEFAULT_STRIP)
-OBJCOPY =$(DEFAULT_OBJCOPY)
-OBJDUMP =$(DEFAULT_OBJDUMP)
+AS       =$(DEFAULT_AS)
+LD       =$(DEFAULT_LD)
+CC       =$(DISTCC) $(DEFAULT_CC)
+LINT_CC  = $(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
+CPP      =$(DEFAULT_CPP)
+CXX      =$(DISTCC) $(DEFAULT_CXX)
+LINT_CXX =$(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
+AR       =$(DEFAULT_AR)
+RANLIB   =$(DEFAULT_RANLIB)
+NM       =$(DEFAULT_NM)
+STRIP    =$(DEFAULT_STRIP)
+OBJCOPY  =$(DEFAULT_OBJCOPY)
+OBJDUMP  =$(DEFAULT_OBJDUMP)
 MKINSTALL=$(PROJECT_BUILD)/install.sh
 CP      = cp
 
@@ -133,9 +135,12 @@ CFLAGS_PROG += $(DEBUG_CFLAG)
 LDFLAGS_PROG += $(DEBUG_LDFLAG)
 endif
 
-#CFLAGS_PROG += -Wall -Werror -fno-strict-aliasing -pipe $(patsubst %,-I%, $(INCDIRS)) 
-CFLAGS_PROG += -Wall -fno-strict-aliasing -pipe $(patsubst %,-I%, $(INCDIRS)) 
+CFLAGS_PROG += -Wall -Werror -fno-strict-aliasing -pipe $(patsubst %,-I%, $(INCDIRS)) 
 CXXFLAGS += $(CFLAGS_PROG)
+# Lint
+LINT_CXXFLAGS = $(patsubst %,-I%, $(INCDIRS))
+LINT_CFLAGS_PROG = $(patsubst %,-I%, $(INCDIRS))
+
 ifndef NO_THREADS
 ifdef CONFIG_GLIBC
 	LDFLAGS_PROG += -lrt
@@ -155,6 +160,15 @@ VERSION     = $(shell awk -F\" '/REL/ {print $$2}' $(VERSIONFILE))
 INSTALLDIR = /lib/modules/$(VERSION)/misc
 
 OBJECT_EXT	= .o
+# Lint object extension
+LOB_EXT	= .lob
+LINT_CONFIG_PATH = $(PROJECT_BUILD)/PCLint/config
+LINT_CONFIGS_FOLDER = -i$(LINT_CONFIG_PATH)
+LINT_CONFIG_FILE := std.lnt
+LINT_CONFIG = -b +v
+# Lint - specifying folder containing lint configuration files of project before lint file 
+LINT_CONFIG += $(LINT_CONFIGS_FOLDER)
+LINT_CONFIG += $(LINT_CONFIG_FILE) 
 
 version_include_name = $(TOPDIR)/$(CVS_MODULE_NAME)/version.include
 svninfo_include_name = $(TOPDIR)/svninfo.include
