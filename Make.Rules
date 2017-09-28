@@ -77,7 +77,7 @@ else
 $(TARGET_MODULES) : dummy
 	@echo "Building module $@"
 	@$(MAKE) BUILD_ONE_MODULE=$@ CFLAGS="$(CFLAGS_KERNEL)" $@
-	@echo "Copying $@ to $(MODULE_DIR)"
+	@echo "Copying2 $@ to $(MODULE_DIR)"
 	@mkdir -p $(MODULE_DIR)
 ifdef KERNEL_2_6
 	@$(CP) $(@:.o=.ko) $(MODULE_DIR)
@@ -105,7 +105,7 @@ $(TARGET_KERNLIBS) : dummy
 	@echo "Building kernel library $@"
 #	echo $(call obj_path_fix,$(basename $(SRCS_$@)))
 	@$(MAKE) BUILD_ONE_KERNLIB=$@ CFLAGS="$(CFLAGS_KERNEL)" $@
-	@echo "Copying $@ to $(call target_lib_dir,$@)"
+	@echo "Copying3 $@ to $(call target_lib_dir,$@)"
 	mkdir -p $(call target_lib_dir,$@)
 	$(CP) $(EXE_DIR)/$@ $(call target_lib_dir,$@)
 ifdef ENABLE_STRIP
@@ -128,7 +128,7 @@ else
 $(TARGET_PROGS) : dummy
 	@echo "Building prog $@$(PROG_SUFFIX)"
 	@$(MAKE) BUILD_ONE_PROG=$@ CFLAGS="$(CFLAGS_PROG)" $@
-	@echo "Copying $@$(PROG_SUFFIX) to $(call target_bin_dir,$@$(PROG_SUFFIX))"
+	@echo "Copying4 $@$(PROG_SUFFIX) to $(call target_bin_dir,$@$(PROG_SUFFIX))"
 	@mkdir -p $(call target_bin_dir,$@)
 	@$(CP) $(EXE_DIR)/$@$(PROG_SUFFIX) $(call target_bin_dir,$@$(PROG_SUFFIX))
 ifdef ENABLE_STRIP
@@ -166,11 +166,15 @@ else
 $(TARGET_LIBS) : dummy
 	@echo "Building lib $@"
 	@$(MAKE) BUILD_ONE_LIB=$@ CFLAGS="$(CFLAGS_PROG)" $@
-	@echo "Copying $@ to $(call target_lib_dir,$@)"
+ifdef NO_LINT
+	@echo "Copying5 $@ to $(call target_lib_dir,$@)"
 	@mkdir -p $(call target_lib_dir,$@)
 	@$(CP) $(EXE_DIR)/$@.a $(call target_lib_dir,$@)
-ifndef NO_SHAREDLIB
+endif
+ifndef NO_SHAREDLIB 
+ifdef NO_LINT
 	@$(CP) $(EXE_DIR)/$@.so $(call target_lib_dir,$@)
+endif
 endif
 ifdef ENABLE_STRIP
 	$(QUIET) $(STRIP) --strip-unneeded $(call target_lib_dir,$@)/$@.a
