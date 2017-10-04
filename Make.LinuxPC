@@ -1,5 +1,4 @@
 # -*- makefile -*-
-PLATFORM_CFLAGS += -DCDI_IOCTL_DEFINITIONS="\"ioctl_magic.h\""
 ifndef BIN_ARCH
 	BIN_ARCH=
 endif
