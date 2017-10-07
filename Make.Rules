@@ -118,7 +118,7 @@ ifdef BUILD_ONE_PROG
 #$(TARGET_ARCS) : dummy
 #	@$(MAKE) -C $(dir $@)
 
-ifdef NO_LINT
+ifndef HAVE_LINT
 $(BUILD_ONE_PROG) : $(BUILD_ONE_TARGET) ;
 else
 $(BUILD_ONE_PROG) : $(BUILD_ONE_TARGET).lint ;
@@ -150,7 +150,7 @@ ifdef BUILD_ONE_LIB
 ifdef NO_SHAREDLIB
 $(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a;
 else
-ifdef NO_LINT
+ifndef HAVE_LINT
 $(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).a $(BUILD_ONE_TARGET).so;
 else
 $(BUILD_ONE_LIB) : $(BUILD_ONE_TARGET).lint
@@ -174,13 +174,13 @@ else
 $(TARGET_LIBS) : dummy
 	@echo "Building lib $@"
 	@$(MAKE) BUILD_ONE_LIB=$@ CFLAGS="$(CFLAGS_PROG)" $@
-ifdef NO_LINT
+ifndef HAVE_LINT
 	@echo "Copying5 $@ to $(call target_lib_dir,$@)"
 	@mkdir -p $(call target_lib_dir,$@)
 	@$(CP) $(EXE_DIR)/$@.a $(call target_lib_dir,$@)
 endif
 ifndef NO_SHAREDLIB 
-ifdef NO_LINT
+ifndef HAVE_LINT
 	@$(CP) $(EXE_DIR)/$@.so $(call target_lib_dir,$@)
 endif
 endif
