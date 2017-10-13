@@ -116,10 +116,80 @@ private:
 };
 
 ${namespace_end}
-#endif /* ifndef ${include_guard_symbol} */</template><template autoinsert="true" context="org.eclipse.cdt.core.cSource.contenttype_context" deleted="false" description="Default template for newly created C source files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.csourcefile" name="Default C source template">${filecomment}
+#endif /* ifndef ${include_guard_symbol} */</template><template autoinsert="false" context="org.eclipse.cdt.core.cSource.contenttype_context" deleted="false" description="Default template for newly created C source files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.csourcefile" name="Default C source template">/*==============================================================================
+ * @Company
+ * @Copyright
+ * UNPUBLISHED WORK
+ * ALL RIGHTS RESERVED
+ *
+ * This software is the confidential and proprietary information of
+ *
+ *
+ *============================================================================*/
+
+/*=============================================================================
+ * ${file_name}
+ *
+ * @brief
+ *============================================================================*/
+
+/******************************************************************************
+ * INCLUDE FILES
+ *****************************************************************************/
 ${includes}
 
-${declarations}</template><template autoinsert="false" context="org.eclipse.cdt.core.cHeader.contenttype_context" deleted="false" description="Default template for newly created C header files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.cheaderfile" name="Default C header template">/*==============================================================================
+/******************************************************************************
+ * LOCAL DEFINITIONS
+ *****************************************************************************/
+
+/******************************************************************************
+ * LOCAL TYPES
+ *****************************************************************************/
+
+/******************************************************************************
+ * LOCAL VARIABLE DECLARATIONS
+ *****************************************************************************/
+
+/**  */
+
+/******************************************************************************
+ * LOCAL FUNCTION PROTOTYPES
+ *****************************************************************************/
+
+/*****************************************************************************
+ * FUNCTION DEFINITIONS
+ *****************************************************************************/
+
+/**============================================================================
+ * @brief
+ *
+ *
+ * @param
+ * @param
+ *
+ * @return
+ * @retval
+ * @retval
+ *============================================================================*/
+
+
+/**============================================================================
+ * LOCAL FUNCTIONS
+ *============================================================================*/
+
+/**============================================================================
+ * @brief
+ *
+ *
+ * @param
+ * @param
+ * @param
+ *
+ * @return
+ * @retval
+ * @retval
+ *============================================================================*/
+</template><template autoinsert="false" context="org.eclipse.cdt.core.cHeader.contenttype_context" deleted="false" description="Default template for newly created C header files" enabled="true" id="org.eclipse.cdt.ui.text.codetemplates.cheaderfile" name="Default C header template">/*==============================================================================
  * @Company
  * @Copyright
  * UNPUBLISHED WORK
