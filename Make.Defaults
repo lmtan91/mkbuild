@@ -100,8 +100,8 @@ STRIP    =$(DEFAULT_STRIP)
 OBJCOPY  =$(DEFAULT_OBJCOPY)
 OBJDUMP  =$(DEFAULT_OBJDUMP)
 MKINSTALL=$(PROJECT_BUILD)/install.sh
-CP      = cp
 endif
+CP      = cp
 
 JAVA_HOME ?= /usr/java/j2sdk1.4.2_11
 JAVAC = $(JAVA_HOME)/bin/javac
