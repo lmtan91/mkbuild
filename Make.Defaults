@@ -89,10 +89,8 @@ ifndef CC
 AS       =$(DEFAULT_AS)
 LD       =$(DEFAULT_LD)
 CC       =$(DISTCC) $(DEFAULT_CC)
-LINT_CC  = $(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
 CPP      =$(DEFAULT_CPP)
 CXX      =$(DISTCC) $(DEFAULT_CXX)
-LINT_CXX =$(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
 AR       =$(DEFAULT_AR)
 RANLIB   =$(DEFAULT_RANLIB)
 NM       =$(DEFAULT_NM)
@@ -102,6 +100,8 @@ OBJDUMP  =$(DEFAULT_OBJDUMP)
 MKINSTALL=$(PROJECT_BUILD)/install.sh
 endif
 CP      = cp
+LINT_CC  =$(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
+LINT_CXX =$(PROJECT_BUILD)/PCLint/exe/lint-nt.launch
 
 JAVA_HOME ?= /usr/java/j2sdk1.4.2_11
 JAVAC = $(JAVA_HOME)/bin/javac
